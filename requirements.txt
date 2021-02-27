@@ -61,8 +61,8 @@ patsy==0.5.1
 pickleshare
 Pillow
 pipreqs==0.4.10
-plotly==4.12.0
-#plotly_express==0.4.0
+plotly
+plotly-express
 prometheus-client
 prompt-toolkit
 protobuf==3.15.2

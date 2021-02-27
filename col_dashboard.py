@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import datetime
 import glob
-from plotly import plotly.express as px
+import plotly.express as px
 import numpy as np
 from io import BytesIO
 import base64
