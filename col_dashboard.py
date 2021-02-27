@@ -27,7 +27,7 @@ def col_total_percent(df):
 
 @st.cache()
 def read_col_files():
-    all_files = glob.glob("./Data/COL_weekly/*.xls")
+    all_files = glob.glob("./Data/*.xls")
     col = pd.DataFrame()
     trans = pd.DataFrame()
     for file in all_files:
@@ -45,7 +45,8 @@ def read_col_files():
 
 @st.cache
 def store_code():
-    df = pd.read_excel('./Data/Store info/Tracking store by year.xls', nrows=100,usecols=['Store Code','Store', 'AC', 'Region','Province','Concept','Opening Date'],parse_dates=['Opening Date'])
+    df = pd.read_excel('./store_info/Tracking store by year.xls', nrows=100,usecols=['Store Code','Title', 'AC', 'Region','Province','Concept','Opening Date'],parse_dates=['Opening Date'])
+    df.rename(columns={'Title':'Store'}, inplace=True)
     df['full_name'] = df['Store Code'] + '-' + df['Store']
     return df
 
