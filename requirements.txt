@@ -61,8 +61,7 @@ patsy==0.5.1
 pickleshare
 Pillow
 pipreqs==0.4.10
-plotly
-plotly-express
+plotly==4.12.0
 prometheus-client
 prompt-toolkit
 protobuf==3.15.2
@@ -76,7 +75,6 @@ pyrsistent
 PySocks
 python-dateutil==2.8.1
 pytz
-pywin32==300
 pywinpty
 PyYAML==5.4.1
 pyzmq
