@@ -7,8 +7,6 @@ import numpy as np
 from io import BytesIO
 import base64
 
-st.title('COL Dashboard')
-
 @st.cache()
 def col_process(df):
     #Preprocess data
@@ -175,40 +173,40 @@ def load_baseline():
     bl_df = pd.read_excel('./Data/COL baseline/COL Baseline - Jun 20.xls', sheet_name='Base line JUN 2019')
     return bl_df
 
-def regression_plot(filtered_data_merged, x_axis, y_axis):
+def regression_plot(filtered_data_merged, sidebar_name, x_axis, y_axis):
     # Plot chart with all the settings
 
     if len(x_axis) > 0 and len(y_axis) > 0:
+        with st.sidebar.beta_expander(sidebar_name, expanded=True):
+            # Data grouping and splitplot
+            breakdown_option = [None, 'AC','Region','Province','Concept','Store Name','Code']
+            breakdown = st.selectbox('Data grouping', breakdown_option)
+            split_plot = st.selectbox('Split plot by', breakdown_option)
 
-        # Data grouping and splitplot
-        breakdown_option = [None, 'AC','Region','Province','Concept','Store Name','Code']
-        breakdown = st.sidebar.selectbox('Data grouping', breakdown_option)
-        split_plot = st.sidebar.selectbox('Split plot by', breakdown_option)
+            # Check box for add trendline
+            if st.checkbox('Add trend line', value=True):
+                trendline = "ols"
+            else:
+                trendline = None
 
-        # Check box for add trendline
-        if st.sidebar.checkbox('Add trend line', value=True):
-            trendline = "ols"
-        else:
-            trendline = None
+            # Remove 0 values in the dataset to plot more accurate regression line
+            if st.checkbox('Remove 0 values'):
+                filtered_data_merged = filtered_data_merged[(filtered_data_merged[x_axis] > 0) & (filtered_data_merged[y_axis] > 0)]
+            else:
+                # Define 0 value
+                zero_value_x_axis = filtered_data_merged[filtered_data_merged[x_axis] == 0][x_axis]
+                zero_value_y_axis = filtered_data_merged[filtered_data_merged[y_axis] == 0][y_axis]
 
-        # Remove 0 values in the dataset to plot more accurate regression line
-        if st.sidebar.checkbox('Remove 0 values'):
-            filtered_data_merged = filtered_data_merged[(filtered_data_merged[x_axis] > 0) & (filtered_data_merged[y_axis] > 0)]
-        else:
-            # Define 0 value
-            zero_value_x_axis = filtered_data_merged[filtered_data_merged[x_axis] == 0][x_axis]
-            zero_value_y_axis = filtered_data_merged[filtered_data_merged[y_axis] == 0][y_axis]
+                st.subheader('No. of 0 values at x-axis: ')
+                st.info(zero_value_x_axis.count())
+                st.subheader('No. of 0 values at y-axis:')
+                st.info(zero_value_y_axis.count())
 
-            st.sidebar.subheader('No. of 0 values at x-axis: ')
-            st.sidebar.info(zero_value_x_axis.count())
-            st.sidebar.subheader('No. of 0 values at y-axis:')
-            st.sidebar.info(zero_value_y_axis.count())
-
-        # Add boxplot for x-axis and y-axis
-        if st.sidebar.checkbox('Add boxplots for axes'):
-            marginal = "box"
-        else:
-            marginal = None
+            # Add boxplot for x-axis and y-axis
+            if st.checkbox('Add boxplots for axes'):
+                marginal = "box"
+            else:
+                marginal = None
                 
         fig = px.scatter(filtered_data_merged,x=x_axis,y=y_axis,color=breakdown,opacity=0.5,facet_col=split_plot, facet_col_wrap=2,trendline=trendline,marginal_x=marginal, marginal_y=marginal, height=600).update_layout(autosize=True)
         fig.update_yaxes(rangemode="tozero")
@@ -267,7 +265,7 @@ def spmh_time_series(data, resample):
     return spmh_df, spmh_ts_plot
 
 # Expander - Data Filter Setting
-with st.sidebar.beta_expander("Data Filter", expanded=False):
+with st.sidebar.beta_expander("Data Filter", expanded=True):
 
     store_code_func = store_code()
     # Store selection options
@@ -315,11 +313,11 @@ with st.sidebar.beta_expander("Data Filter", expanded=False):
     #filtered_trans_merged = filtered_trans_merged.loc[(filtered_trans_merged['date']>=date_range[0]) & (filtered_trans_merged['date']<=date_range[1])]
 
 # Multi page selector
-page = st.selectbox('Page Navigation:',('Exploratory Analysis','COL KPI Dashboard','COL Time Series Analysis'))
+page = st.selectbox('Page Navigation:',('COL KPI Dashboard','Exploratory Analysis','COL Time Series Analysis'))
 if page == 'Exploratory Analysis':
     x_axis = st.sidebar.selectbox('x-axis',filtered_data_merged.columns)
     y_axis = st.sidebar.selectbox('y-axis',filtered_data_merged.columns)
-    regression_plot(filtered_data_merged, x_axis, y_axis)
+    regression_plot(filtered_data_merged, 'Regression Plot', x_axis, y_axis)
     with st.beta_expander('Correlation Matrix',expanded=True):
         st.write(filtered_data_merged.corr(method='pearson'))
 elif page == 'COL KPI Dashboard':
@@ -330,17 +328,19 @@ elif page == 'COL KPI Dashboard':
     with col1:
         st.subheader('Missing Sales Forecast:')
         missing_sales_forecast = filtered_data_merged[filtered_data_merged['Forecast Sales']==0]
-        st.dataframe(missing_sales_forecast.groupby('Store Name')['Forecast Sales'].count())
+        st.dataframe(missing_sales_forecast.groupby('Store Name')['Forecast Sales'].count().sort_values(ascending=False))
     with col2:
         st.subheader('Missing Labour Forecast:')
         missing_labour_forecast = filtered_data_merged[filtered_data_merged['Forecast Hours']==0]
-        st.dataframe(missing_labour_forecast.groupby('Store Name')['Forecast Hours'].count())
+        st.dataframe(missing_labour_forecast.groupby('Store Name')['Forecast Hours'].count().sort_values(ascending=False))
 
     # Mean Absolute error of Sale and Labour Forecast
     st.subheader('Mean Absolute Percentage Error (MAPE):')
     MAPE_dist = pd.pivot_table(filtered_data_merged,values=['Sales MAPE','Labour MAPE','COL% MAPE'],index='Store Name', aggfunc={'Sales MAPE':[np.mean,np.std],'Labour MAPE':[np.mean,np.std],'COL% MAPE':[np.mean,np.std]})
     mape_group = filtered_data_merged.groupby(['Store Name'])[['Sales MAPE','Labour MAPE','COL% MAPE']].mean()
     
+    with st.beta_expander('Display Data', expanded=True):
+        st.dataframe(MAPE_dist)   
     # Sidebar parameter setting
     with st.sidebar.beta_expander('MAPE Parameters:', expanded=True):
         st.write('COL% MAPE: ', "{:.2f}".format(mape_group['COL% MAPE'].mean()))
@@ -350,39 +350,43 @@ elif page == 'COL KPI Dashboard':
         sales_mape_target = st.number_input('Sales MAPE Target', value=28, min_value=0, max_value=35)
         labour_mape_target = st.number_input('Labour MAPE Target', value=15, min_value=0, max_value=35)
 
-    if len(store_code) > 10:
-        st.subheader('MAPE Scatter Plot')
-        mape_sales_col_plot = px.scatter(mape_group, x='Sales MAPE',y='Labour MAPE',color=mape_group.index, size='COL% MAPE')
-        mape_sales_col_plot.update_layout(margin={'l':0,'r':0,'b':0,'t':0})
-        mape_sales_col_plot.add_hline(y=labour_mape_target)
-        mape_sales_col_plot.add_vline(x=sales_mape_target)
-        st.plotly_chart(mape_sales_col_plot)
-    else:
-        mape_plot = px.bar(mape_group, barmode='group')
-        st.plotly_chart(mape_plot)
+    with st.beta_expander('Display Chart', expanded=True):
+        if len(store_code) > 10:
+            mape_sales_col_plot = px.scatter(mape_group, x='Sales MAPE',y='Labour MAPE',color=mape_group.index, size='COL% MAPE',facet_col=None)
+            mape_sales_col_plot.update_layout(margin={'l':0,'r':0,'b':0,'t':0})
+            mape_sales_col_plot.add_hline(y=labour_mape_target)
+            mape_sales_col_plot.add_vline(x=sales_mape_target)
+            st.plotly_chart(mape_sales_col_plot)
+        else:
+            mape_plot = px.bar(mape_group, barmode='group')
+            mape_plot.update_layout(margin={'l':0,'r':0,'b':0,'t':0})
+            st.plotly_chart(mape_plot)
 
-    with st.beta_expander('Display Data', expanded=False):
-        st.dataframe(MAPE_dist)
+    st.subheader('MAPE Time Series:')
 
-    st.subheader('MAPE Time series Trend')
     mape_time_series = filtered_data_merged.groupby(['Date'])[['Sales MAPE','Labour MAPE','COL% MAPE']].mean()
     mape_time_series['COL% MAPE Moving Average'] = mape_time_series['COL% MAPE'].ewm(span=30,adjust=False).mean()
     mape_time_series['Sales MAPE Moving Average'] = mape_time_series['Sales MAPE'].ewm(span=30,adjust=False).mean()
     mape_time_series['Labour MAPE Moving Average'] = mape_time_series['Labour MAPE'].ewm(span=30,adjust=False).mean()
-    mape_time_plot = px.line(mape_time_series)
-    mape_time_plot.update_layout(margin={'l':0,'r':0,'b':0,'t':0})
-    st.plotly_chart(mape_time_plot)
-    with st.beta_expander('Display Data', expanded=False):
+    
+    with st.beta_expander('Display Data', expanded=True):
         st.write(mape_time_series)
+
+    with st.beta_expander('Display Chart', expanded=True):
+        mape_time_plot = px.line(mape_time_series)
+        mape_time_plot.update_layout(margin={'l':0,'r':0,'b':0,'t':0})
+        st.plotly_chart(mape_time_plot)
 
     # Productivity trend
     st.subheader('Productivity (SPMH) vs Actual Sales:')
-    regression_plot(filtered_data_merged, 'Actual sales','Actual SPMH')
+    regression_plot(filtered_data_merged, 'SPMH vs Actual Sales Parameters:', 'Actual sales','Actual SPMH')
     spmh_df, spmh_ts_plot = spmh_time_series(filtered_data_merged, 'D')
+    spmh_ts_plot.update_layout(margin={'l':0,'r':0,'b':0,'t':0})
     st.plotly_chart(spmh_ts_plot, use_container_width=True )
     
     spmh_df['weekdays'] = spmh_df.index.day_name()
     weekday_spmh_plot = px.box(spmh_df, x='weekdays', y='Actual SPMH')
+    weekday_spmh_plot.update_layout(margin={'l':0,'r':0,'b':0,'t':0})
     st.plotly_chart(weekday_spmh_plot, use_container_width=True)
 
     #st.write(store_code_func)
