@@ -82,7 +82,7 @@ def filtered_data_merged(df, trans, store):
     filtered_data_merged.reset_index(inplace=True)
     # rename columns COL%, COL$ and COL.1% to forecast COL%, forecast COL$ and actual COL%
     filtered_data_merged = filtered_data_merged.rename(columns={'COL $':'Forecast COL $','COL %':'Forecast COL %','COL %.1':'Actual COL %'})
-    
+
     # Assign column types
     filtered_data_merged = filtered_data_merged.astype({
             'Code': 'string',
@@ -122,7 +122,7 @@ def filtered_data_merged(df, trans, store):
         })
 
     # Add extra columns Total Transaction, SPMH and TPMH
-    filtered_data_merged['Total Transaction'] = filtered_data_merged['Pickup trans']+filtered_data_merged['Dinein trans']
+    filtered_data_merged['Total Transaction'] = filtered_data_merged['Pickup trans']+filtered_data_merged['Dinein trans']+filtered_data_merged['Delivery trans']
     if filtered_data_merged['Forecast Hours'].empty:
         filtered_data_merged['Forecast SPMH'] = 0
     else: 
@@ -147,6 +147,7 @@ def filtered_data_merged(df, trans, store):
     # Add COL% Variance
     filtered_data_merged['COL% Variance'] = (filtered_data_merged['Actual COL %'] - filtered_data_merged['Forecast COL %']) / filtered_data_merged['Actual COL %']
     filtered_data_merged['COL% MAPE'] = MAPE(filtered_data_merged['Actual COL %'], filtered_data_merged['Forecast COL %'])
+    filtered_data_merged['TA'] = filtered_data_merged['Actual sales'].div(filtered_data_merged['Total Transaction'])
     return filtered_data_merged
 
 def to_excel(df):
@@ -336,8 +337,8 @@ elif page == 'COL KPI Dashboard':
 
     # Mean Absolute error of Sale and Labour Forecast
     st.subheader('Mean Absolute Percentage Error (MAPE):')
-    MAPE_dist = pd.pivot_table(filtered_data_merged,values=['Sales MAPE','Labour MAPE','COL% MAPE'],index='Store Name', aggfunc={'Sales MAPE':[np.mean,np.std],'Labour MAPE':[np.mean,np.std],'COL% MAPE':[np.mean,np.std]})
-    mape_group = filtered_data_merged.groupby(['Store Name'])[['Sales MAPE','Labour MAPE','COL% MAPE']].mean()
+    MAPE_dist = pd.pivot_table(filtered_data_merged,values=['Sales MAPE','Labour MAPE','COL% MAPE'],index='Store Name', aggfunc={'Sales MAPE':[np.mean],'Labour MAPE':[np.mean],'COL% MAPE':[np.mean]})
+    mape_group = filtered_data_merged.groupby(['Store Name'])[['COL% MAPE','Sales MAPE','Labour MAPE']].mean()
     
     with st.beta_expander('Display Data', expanded=True):
         st.dataframe(MAPE_dist)   
@@ -346,8 +347,8 @@ elif page == 'COL KPI Dashboard':
         st.write('COL% MAPE: ', "{:.2f}".format(mape_group['COL% MAPE'].mean()))
         st.write('Sales MAPE: ', "{:.2f}".format(mape_group['Sales MAPE'].mean()))
         st.write('Labour MAPE: ', "{:.2f}".format(mape_group['Labour MAPE'].mean()))
-        col_mape_target = st.number_input('COL% MAPE Target', value=34, min_value=0, max_value=35)
-        sales_mape_target = st.number_input('Sales MAPE Target', value=28, min_value=0, max_value=35)
+        col_mape_target = st.number_input('COL% MAPE Target', value=30, min_value=0, max_value=35)
+        sales_mape_target = st.number_input('Sales MAPE Target', value=23, min_value=0, max_value=35)
         labour_mape_target = st.number_input('Labour MAPE Target', value=15, min_value=0, max_value=35)
 
     with st.beta_expander('Display Chart', expanded=True):
@@ -361,6 +362,27 @@ elif page == 'COL KPI Dashboard':
             mape_plot = px.bar(mape_group, barmode='group')
             mape_plot.update_layout(margin={'l':0,'r':0,'b':0,'t':0})
             st.plotly_chart(mape_plot)
+    
+    with st.beta_expander('Action Recommendations', expanded=True):
+        st.subheader('Immediate Action Required')
+        important_urgent = mape_group[(mape_group['Sales MAPE'] > sales_mape_target) & (mape_group['Labour MAPE'] > labour_mape_target) & (mape_group['COL% MAPE'] > col_mape_target)].sort_values(by=['COL% MAPE'],ascending=False)
+        st.write('Total', len(important_urgent),' stores that MAPE for COL%, Sales Forecasting and Labour planning is beyond target. They require immediate attention to improve sales forecasting and labour planning accuracy that will drive COL% consistency.')
+        st.write(important_urgent)
+
+        st.subheader('Improve Sales Forecasting')
+        sales_improvement = mape_group[(mape_group['Sales MAPE'] > sales_mape_target) & (mape_group['Labour MAPE'] < labour_mape_target)].sort_values(by=['COL% MAPE'], ascending=False)
+        st.write('Total', len(sales_improvement),' stores that are required to improve their sales forecasting accuracy, or improving labour arrangement if sales does not go as expected in order to improve COL% MAPE.')
+        st.write(sales_improvement)
+
+        st.subheader('Improve Labour Planning')
+        labour_improvement = mape_group[(mape_group['Sales MAPE'] < sales_mape_target) & (mape_group['Labour MAPE'] > labour_mape_target)].sort_values(by=['COL% MAPE'], ascending=False)
+        st.write('Total', len(labour_improvement),' stores that are required to improve their labour planning accuracy')
+        st.write(labour_improvement)
+
+        st.subheader('Deserve some recognitions')
+        good_job = mape_group[(mape_group['COL% MAPE'] < col_mape_target) & (mape_group['Sales MAPE'] < sales_mape_target) & (mape_group['Labour MAPE'] < labour_mape_target)].sort_values(by=['COL% MAPE'], ascending=True)
+        st.write('Total', len(good_job), ' have achieved all MAPE within target. Well Done.')
+        st.write(good_job)
 
     st.subheader('MAPE Time Series:')
 
@@ -418,7 +440,44 @@ elif page == 'COL Time Series Analysis':
         data_resample_option = st.selectbox('Data resample by:',resample_id,format_func=lambda x:dic[x])
         st.write(filtered_data_merged.columns)
         # Apply sampled option to dataframe
-        system_total_df = filtered_data_merged.resample(data_resample_option, on='Date').agg('sum') #Use agg({}) to solve the problem
+        system_total_df = filtered_data_merged.resample(data_resample_option, on='Date').agg({
+            'Forecast Sales': np.sum,
+            'Forecast Hours': np.sum,
+            'Forecast COL $': np.sum,
+            'Forecast COL %': np.mean,
+            'Actual sales': np.sum,
+            'Total actual hours (included Holiday and paid leave days)':np.sum,
+            'Actual hours of MNGT': np.sum,
+            'Actual hours of TMs Full time': np.sum,
+            'Actual hours of TMs Part time': np.sum,
+            'Total actual hours (excluded Holiday and paid leave days)': np.sum,
+            'Hours of holiday/paid leave days': np.sum,
+            'Total COL $ (included Holiday and paid leave days)':np.sum,
+            'COL $  of TM Full time': np.sum,
+            'COL $  of TM Part time': np.sum,
+            'COL $ Management': np.sum,
+            'Total COL (excluded Holiday and paid leave days)': np.sum,
+            'COL of holidays/paid leave days': np.sum,
+            'Actual COL %': np.mean,
+            'COL Val %': np.mean,
+            'Working hour in work shift': np.sum,
+            'Over time in normal day':np.sum,
+            'Over time in weekend':np.sum,
+            'Over time in holiday': np.sum,
+            'working hour in normal day (Night)': np.sum,
+            'Over time in normal day (Night)':np.sum,
+            'Over time in weekend (Night)':np.sum,
+            'Over time in holiday (Night)':np.sum,
+            '13th salary':np.sum,
+            'BSC bonus':np.sum,
+            'PA bonus':np.sum,
+            'Meal Allowance':np.sum,
+            'Insurance contribution Amount per day':np.sum,
+            'Actual TPMH': np.mean,
+            'Actual SPMH': np.mean,
+            'Total Transaction':np.sum,
+            'TA': np.mean
+        })
 
         system_total_df['weekdays'] = system_total_df.index.day_name()
         system_total_df['Actual SPMH'] = system_total_df['Actual sales'].div(system_total_df['Total actual hours (included Holiday and paid leave days)'])
@@ -440,4 +499,8 @@ elif page == 'COL Time Series Analysis':
             weekdays_options = st.selectbox('Select data', system_total_df.columns, key='weekdays_options')
             weekdays_rate_plot = px.box(system_total_df,x='weekdays',y=weekdays_options)
             weekdays_rate_plot.update_layout(margin={'l':0,'r':0,'b':0,'t':0})
-            st.plotly_chart(weekdays_rate_plot, use_container_width=True)
+            st.plotly_chart(weekdays_rate_plot, use_container_width=True)\
+        
+        ta_productivity = system_total_df[['Actual TPMH','Actual SPMH','TA']]
+        st.write(ta_productivity)
+
