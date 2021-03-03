@@ -65,7 +65,7 @@ def filtered_data_merged(df, trans, store):
     filtered_trans_merged['date'] = pd.to_datetime(filtered_trans_merged['date'])
 
     filtered_data_merged = filtered_data_merged.set_index(['Date','Code'])
-    trans['ordertype desc'] = trans['ordertype desc'].str.strip()
+    trans['ordertype desc'].str.strip()
 
     # extract sales/trans by channel and merge to filtered_data_merged dataframe
     for type in trans['ordertype desc'].unique():
