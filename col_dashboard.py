@@ -6,6 +6,10 @@ import plotly.express as px
 import numpy as np
 from io import BytesIO
 import base64
+import statsmodels.api as sm
+from statsmodels.tsa.seasonal import seasonal_decompose
+
+
 
 @st.cache()
 def col_process(df):
@@ -91,7 +95,7 @@ def filtered_data_merged(df, trans, store):
             'Forecast Hours': 'int64',
             'Forecast COL $': 'float64',
             'Forecast COL %': 'float64',
-            'Actual sales': 'int64',
+            'Actual sales': 'float64',
             'Total actual hours (included Holiday and paid leave days)':'int64',
             'Actual hours of MNGT': 'int64',
             'Actual hours of TMs Full time': 'int64',
@@ -229,23 +233,27 @@ def regression_plot(filtered_data_merged, sidebar_name, x_axis, y_axis):
             if trendline:
                 st.subheader('Properties of regression line')
                 # Add trendline by stores with table
-                regression_df = px.get_trendline_results(fig)
-                regression_df = regression_df.set_index(breakdown)
-                m=[]
-                y=[]
-                r2=[]
-                for store in regression_df.index:
-                    _m = regression_df.loc[store].px_fit_results.params[1]
-                    m.append(_m)
-                    _y = regression_df.loc[store].px_fit_results.params[0]
-                    y.append(_y)
-                    _r2 = regression_df.loc[store].px_fit_results.rsquared
-                    r2.append(_r2)
-                regression_df['Gradient'] = m
-                regression_df['y-intercept'] = y
-                regression_df['R2 Score'] = r2
-                st.dataframe(regression_df[['Gradient','y-intercept','R2 Score']].sort_values(breakdown))
-                regression_df.dropna(inplace=True)
+                def regression_table(fig):
+                    regression_df = px.get_trendline_results(fig)
+                    regression_df = regression_df.set_index(breakdown)
+                    m=[]
+                    y=[]
+                    r2=[]
+                    for store in regression_df.index:
+                        _m = regression_df.loc[store].px_fit_results.params[1]
+                        m.append(_m)
+                        _y = regression_df.loc[store].px_fit_results.params[0]
+                        y.append(_y)
+                        _r2 = regression_df.loc[store].px_fit_results.rsquared
+                        r2.append(_r2)
+                    regression_df['Gradient'] = m
+                    regression_df['y-intercept'] = y
+                    regression_df['R2 Score'] = r2
+                    # st.dataframe(regression_df[['Gradient','y-intercept','R2 Score']].sort_values(breakdown))
+                    regression_df.dropna(inplace=True)
+                    return regression_df
+                regression_df = regression_table(fig)
+                st.dataframe(regression_df)
                 st.subheader('Gradient-R2 Score Scatterplot')
                 y_r2_plot = px.scatter(regression_df,x='Gradient',y='y-intercept', size='R2 Score',color=regression_df.index)
                 y_r2_plot.add_hline(y=regression_df['y-intercept'].mean())
@@ -262,8 +270,10 @@ def spmh_time_series(data, resample):
     spmh_df = ts_df.resample('D').mean()
     spmh_df = spmh_df[['Actual SPMH']]
     spmh_df['SPMH Moving Average'] = spmh_df['Actual SPMH'].ewm(span=7,adjust=False).mean()
+    result = seasonal_decompose(spmh_df['Actual SPMH'], model='additive')
     spmh_ts_plot = px.line(spmh_df)
-    return spmh_df, spmh_ts_plot
+
+    return spmh_df, spmh_ts_plot,result
 
 # Expander - Data Filter Setting
 with st.sidebar.beta_expander("Data Filter", expanded=True):
@@ -401,8 +411,15 @@ elif page == 'COL KPI Dashboard':
 
     # Productivity trend
     st.subheader('Productivity (SPMH) vs Actual Sales:')
-    regression_plot(filtered_data_merged, 'SPMH vs Actual Sales Parameters:', 'Actual sales','Actual SPMH')
-    spmh_df, spmh_ts_plot = spmh_time_series(filtered_data_merged, 'D')
+    # regression_plot(filtered_data_merged, 'SPMH vs Actual Sales Parameters:', 'Actual sales','Actual SPMH')
+
+    spmh_sales_reg_df = filtered_data_merged[['Date','Code','Store Name','Actual sales','Actual SPMH']]
+    X = spmh_sales_reg_df['Actual sales'].fillna(0)
+    y = spmh_sales_reg_df['Actual SPMH'].fillna(0)
+    plt = px.scatter(spmh_sales_reg_df, x=X,y=y,color='Store Name',trendline='ols')
+    st.plotly_chart(plt)
+
+    spmh_df, spmh_ts_plot,result = spmh_time_series(filtered_data_merged, 'D')
     spmh_ts_plot.update_layout(margin={'l':0,'r':0,'b':0,'t':0})
     st.plotly_chart(spmh_ts_plot, use_container_width=True )
     
