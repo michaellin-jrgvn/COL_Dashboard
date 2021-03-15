@@ -43,6 +43,7 @@ def read_col_files():
         col = col.drop_duplicates(subset=['Actual sales','Total COL $ (included Holiday and paid leave days)'])
         trans = trans.drop_duplicates(subset=['date','shopcode','Sale','Trans'])
         # col['Date'] = pd.to_datetime(col['Date'])
+        col = col.fillna(0)
     return col, trans
 
 @st.cache
@@ -141,6 +142,7 @@ def filtered_data_merged(df, trans, store):
     def MAPE(actual, forecast):
         mape = 100* (abs(actual - forecast) / actual)
         mape.replace(np.inf,0, inplace=True)
+        mape = mape.fillna(0)
         return mape
 
     filtered_data_merged['Sales MAPE'] = MAPE(filtered_data_merged['Actual sales'], filtered_data_merged['Forecast Sales'])
@@ -152,6 +154,7 @@ def filtered_data_merged(df, trans, store):
     filtered_data_merged['COL% Variance'] = (filtered_data_merged['Actual COL %'] - filtered_data_merged['Forecast COL %']) / filtered_data_merged['Actual COL %']
     filtered_data_merged['COL% MAPE'] = MAPE(filtered_data_merged['Actual COL %'], filtered_data_merged['Forecast COL %'])
     filtered_data_merged['TA'] = filtered_data_merged['Actual sales'].div(filtered_data_merged['Total Transaction'])
+    filtered_data_merged = filtered_data_merged.fillna(0)
     return filtered_data_merged
 
 def to_excel(df):
@@ -175,8 +178,28 @@ def get_table_download_link(df):
 @st.cache()
 def load_baseline():
     # import baseline COL data and merge with current COL Dataframe
-    bl_df = pd.read_excel('./Data/COL baseline/COL Baseline - Jun 20.xls', sheet_name='Base line JUN 2019')
+    bl_df = pd.read_excel('./Data/Baseline/COL Baseline - Jun 20.xls', sheet_name='Base line JUN 2019', header=0)
     return bl_df
+
+def regression_table(fig, breakdown):
+    regression_df = px.get_trendline_results(fig)
+    regression_df = regression_df.set_index(breakdown)
+    m=[]
+    y=[]
+    r2=[]
+    for store in regression_df.index:
+        _m = regression_df.loc[store].px_fit_results.params[1]
+        m.append(_m)
+        _y = regression_df.loc[store].px_fit_results.params[0]
+        y.append(_y)
+        _r2 = regression_df.loc[store].px_fit_results.rsquared
+        r2.append(_r2)
+    regression_df['Gradient'] = m
+    regression_df['y-intercept'] = y
+    regression_df['R2 Score'] = r2
+    # st.dataframe(regression_df[['Gradient','y-intercept','R2 Score']].sort_values(breakdown))
+    regression_df.dropna(inplace=True)
+    return regression_df
 
 def regression_plot(filtered_data_merged, sidebar_name, x_axis, y_axis):
     # Plot chart with all the settings
@@ -233,26 +256,7 @@ def regression_plot(filtered_data_merged, sidebar_name, x_axis, y_axis):
             if trendline:
                 st.subheader('Properties of regression line')
                 # Add trendline by stores with table
-                def regression_table(fig):
-                    regression_df = px.get_trendline_results(fig)
-                    regression_df = regression_df.set_index(breakdown)
-                    m=[]
-                    y=[]
-                    r2=[]
-                    for store in regression_df.index:
-                        _m = regression_df.loc[store].px_fit_results.params[1]
-                        m.append(_m)
-                        _y = regression_df.loc[store].px_fit_results.params[0]
-                        y.append(_y)
-                        _r2 = regression_df.loc[store].px_fit_results.rsquared
-                        r2.append(_r2)
-                    regression_df['Gradient'] = m
-                    regression_df['y-intercept'] = y
-                    regression_df['R2 Score'] = r2
-                    # st.dataframe(regression_df[['Gradient','y-intercept','R2 Score']].sort_values(breakdown))
-                    regression_df.dropna(inplace=True)
-                    return regression_df
-                regression_df = regression_table(fig)
+                regression_df = regression_table(fig, breakdown)
                 st.dataframe(regression_df)
                 st.subheader('Gradient-R2 Score Scatterplot')
                 y_r2_plot = px.scatter(regression_df,x='Gradient',y='y-intercept', size='R2 Score',color=regression_df.index)
@@ -393,6 +397,7 @@ elif page == 'COL KPI Dashboard':
         st.write('Total', len(good_job), ' have achieved all MAPE within target. Well Done.')
         st.write(good_job)
 
+    
     st.subheader('MAPE Time Series:')
 
     mape_time_series = filtered_data_merged.groupby(['Date'])[['Sales MAPE','Labour MAPE','COL% MAPE']].mean()
@@ -409,24 +414,82 @@ elif page == 'COL KPI Dashboard':
         st.plotly_chart(mape_time_plot)
 
     # Productivity trend
+    st.header('Productivity')
+    st.subheader('Days below Baseline Sales')
+    baseline_df = load_baseline()
+    baseline_df = baseline_df[['Store code', 'Baseline Labour Hour','Baseline Management Hour','Baseline Total Hour','Baseline Sales','Baseline SPMH']]
+
+    # Merge baseline with the dataframe
+    b_df = filtered_data_merged.merge(baseline_df,how='left', left_on='Code', right_on='Store code',copy=False)
+    b_df =  b_df.drop(['Store code'], axis=1)
+
+    # Filter actual sales below baseline sales
+    below_baseline_sales = b_df[b_df['Actual sales'] <= b_df['Baseline Sales']]
+    sales_baseline_percent = round(len(below_baseline_sales)/len(b_df) * 100)
+    
+    # Filter manhour exceed baseline manhour desipite sales below baseline
+    excess_manhour_vs_baseline = below_baseline_sales[below_baseline_sales['Baseline Total Hour']<below_baseline_sales['Total actual hours (included Holiday and paid leave days)']]
+    excess_manhour_vs_baseline['Variance'] = excess_manhour_vs_baseline['Total actual hours (included Holiday and paid leave days)'] - excess_manhour_vs_baseline['Baseline Total Hour']
+    excess_manhour_vs_baseline['Variance %'] = round(excess_manhour_vs_baseline['Variance'].div(excess_manhour_vs_baseline['Baseline Total Hour']).mul(100),2)
+    excess_manhour_vs_baseline = excess_manhour_vs_baseline.set_index('Store Name')
+    
+    manhour_saving = excess_manhour_vs_baseline['Variance'].sum()
+    total_man_hour = filtered_data_merged['Total actual hours (included Holiday and paid leave days)'].sum()
+    
+    percent_manhour_saving = round(100* manhour_saving / total_man_hour, 2)
+    
+    # Description
+    st.write('There are total', len(b_df),'work days in the filter, but', len(below_baseline_sales),'work days were below baseline, equivalent to',sales_baseline_percent, '%.')
+    st.write(len(excess_manhour_vs_baseline),'out of',len(below_baseline_sales),'below baseline sales works days did not follow the manhour baseline requirements. Below is the distribution of MH Variance by store.')
+    st.write(below_baseline_sales[['Date','Store Name','Actual sales','Baseline Sales','Actual SPMH','Baseline SPMH']])
+
+    mh_var_plot = px.strip(excess_manhour_vs_baseline, x=excess_manhour_vs_baseline.index,y='Variance', hover_data=['Date'].strftime('%Y-%m-%d'))
+    st.plotly_chart(mh_var_plot)
+    st.write(excess_manhour_vs_baseline[['Baseline Total Hour','Total actual hours (included Holiday and paid leave days)','Variance','Variance %']].groupby(excess_manhour_vs_baseline.index).agg({
+        'Baseline Total Hour': np.sum,
+        'Total actual hours (included Holiday and paid leave days)': np.sum,
+        'Variance': np.sum,
+        'Variance %': np.mean
+    }).sort_values(by=['Variance']))
+    
+    st.write(manhour_saving,'manhour can be reduced, equivalent to', percent_manhour_saving,'% of total manhour in the chosen period')
     st.subheader('Productivity (SPMH) vs Actual Sales:')
     # regression_plot(filtered_data_merged, 'SPMH vs Actual Sales Parameters:', 'Actual sales','Actual SPMH')
 
     spmh_sales_reg_df = filtered_data_merged[['Date','Code','Store Name','Actual sales','Actual SPMH']]
     X = spmh_sales_reg_df['Actual sales'].fillna(0)
     y = spmh_sales_reg_df['Actual SPMH'].fillna(0)
-    plt = px.scatter(spmh_sales_reg_df, x=X,y=y,color='Store Name',trendline='ols')
-    st.plotly_chart(plt)
+
+    spmh_store_plt = px.scatter(spmh_sales_reg_df, x=X,y=y,color='Store Name',trendline='ols')
+    st.plotly_chart(spmh_store_plt)
+    
+    with st.beta_expander('Display Table', expanded=True):
+        regression_table = regression_table(spmh_store_plt, 'Store Name')
+        regression_table = regression_table[['Gradient','y-intercept','R2 Score']]
+        st.dataframe(regression_table)
+    with st.beta_expander('Display Chart', expanded=True):
+        st.subheader('SPMH Scatterplot (Gradient vs y-intercept)')
+        regression_plot = px.scatter(regression_table,x='Gradient',y='y-intercept', size='R2 Score',color=regression_table.index)
+        regression_plot.add_hline(y=regression_table['y-intercept'].mean())
+        regression_plot.add_vline(x=regression_table['Gradient'].mean())
+        st.plotly_chart(regression_plot, use_container_width=True)
+
+    st.subheader('SPMH Time Series and Trend')
 
     spmh_df, spmh_ts_plot = spmh_time_series(filtered_data_merged, 'D')
     spmh_ts_plot.update_layout(margin={'l':0,'r':0,'b':0,'t':0})
     st.plotly_chart(spmh_ts_plot, use_container_width=True )
     
+    st.subheader('SPMH Weekdays Boxplot')
     spmh_df['weekdays'] = spmh_df.index.day_name()
     weekday_spmh_plot = px.box(spmh_df, x='weekdays', y='Actual SPMH')
     weekday_spmh_plot.update_layout(margin={'l':0,'r':0,'b':0,'t':0})
     st.plotly_chart(weekday_spmh_plot, use_container_width=True)
 
+    with st.beta_expander('Action Recommendations', expanded=False):
+        st.write('These stores are low in productivity and has a steep difference in SPMH in high and low sales situation:')
+        spmh_worst_stores = regression_table[(regression_table['Gradient']>regression_table['Gradient'].mean()) & (regression_table['y-intercept']<regression_table['y-intercept'].mean())]
+        st.write(spmh_worst_stores)
     #st.write(store_code_func)
     #st.write(filtered_data_merged.columns)
     #meal_df = filtered_data_merged[['Date','Store Name','Meal Allowance']]
@@ -515,7 +578,7 @@ elif page == 'COL Time Series Analysis':
             weekdays_options = st.selectbox('Select data', system_total_df.columns, key='weekdays_options')
             weekdays_rate_plot = px.box(system_total_df,x='weekdays',y=weekdays_options)
             weekdays_rate_plot.update_layout(margin={'l':0,'r':0,'b':0,'t':0})
-            st.plotly_chart(weekdays_rate_plot, use_container_width=True)\
+            st.plotly_chart(weekdays_rate_plot, use_container_width=True)
         
         ta_productivity = system_total_df[['Actual TPMH','Actual SPMH','TA']]
         st.write(ta_productivity)
