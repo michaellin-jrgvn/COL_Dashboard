@@ -440,19 +440,23 @@ elif page == 'COL KPI Dashboard':
     
     # Description
     st.write('There are total', len(b_df),'work days in the filter, but', len(below_baseline_sales),'work days were below baseline, equivalent to',sales_baseline_percent, '%.')
+    with st.beta_expander('Display Data when Sales below baseline by Store & Date', expanded=False):
+        st.write(below_baseline_sales[['Date','Store Name','Actual sales','Baseline Sales','Actual SPMH','Baseline SPMH']])
+    
+    st.subheader('Manhour Variance vs Baseline Hours by Store')
     st.write(len(excess_manhour_vs_baseline),'out of',len(below_baseline_sales),'below baseline sales works days did not follow the manhour baseline requirements. Below is the distribution of MH Variance by store.')
-    st.write(below_baseline_sales[['Date','Store Name','Actual sales','Baseline Sales','Actual SPMH','Baseline SPMH']])
-
-    mh_var_plot = px.strip(excess_manhour_vs_baseline, x=excess_manhour_vs_baseline.index,y='Variance', hover_data=['Date'].strftime('%Y-%m-%d'))
+    st.write(manhour_saving,'manhour can be reduced, equivalent to', percent_manhour_saving,'% of total manhour in the chosen period')
+    excess_manhour_vs_baseline['dis_Date'] = excess_manhour_vs_baseline['Date'].apply(lambda x: x.strftime("%d %b, %Y"))
+    excess_manhour_vs_baseline['Weekday'] = excess_manhour_vs_baseline['Date'].apply(lambda x: x.strftime("%A"))
+    mh_var_plot = px.strip(excess_manhour_vs_baseline, x=excess_manhour_vs_baseline.index,y='Variance', hover_data=['dis_Date', 'Weekday'])
     st.plotly_chart(mh_var_plot)
     st.write(excess_manhour_vs_baseline[['Baseline Total Hour','Total actual hours (included Holiday and paid leave days)','Variance','Variance %']].groupby(excess_manhour_vs_baseline.index).agg({
         'Baseline Total Hour': np.sum,
         'Total actual hours (included Holiday and paid leave days)': np.sum,
         'Variance': np.sum,
         'Variance %': np.mean
-    }).sort_values(by=['Variance']))
+    }).sort_values(by=['Variance'],ascending=False))
     
-    st.write(manhour_saving,'manhour can be reduced, equivalent to', percent_manhour_saving,'% of total manhour in the chosen period')
     st.subheader('Productivity (SPMH) vs Actual Sales:')
     # regression_plot(filtered_data_merged, 'SPMH vs Actual Sales Parameters:', 'Actual sales','Actual SPMH')
 
