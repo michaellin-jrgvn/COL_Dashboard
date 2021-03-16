@@ -274,7 +274,6 @@ def spmh_time_series(data, resample):
     spmh_df = ts_df.resample('D').mean()
     spmh_df = spmh_df[['Actual SPMH']]
     spmh_df['SPMH Moving Average'] = spmh_df['Actual SPMH'].ewm(span=7,adjust=False).mean()
-    result = seasonal_decompose(spmh_df['Actual SPMH'], model='additive')
     spmh_ts_plot = px.line(spmh_df)
 
     return spmh_df, spmh_ts_plot
@@ -464,6 +463,7 @@ elif page == 'COL KPI Dashboard':
     spmh_sales_reg_df = filtered_data_merged[['Date','Code','Store Name','Actual sales','Actual SPMH']]
     X = spmh_sales_reg_df['Actual sales'].fillna(0)
     y = spmh_sales_reg_df['Actual SPMH'].fillna(0)
+
     spmh_store_plt = px.scatter(spmh_sales_reg_df, x=X,y=y,color='Store Name',trendline='ols')
     st.plotly_chart(spmh_store_plt)
     
@@ -479,6 +479,7 @@ elif page == 'COL KPI Dashboard':
         st.plotly_chart(regression_plot, use_container_width=True)
 
     st.subheader('SPMH Time Series and Trend')
+
     spmh_df, spmh_ts_plot = spmh_time_series(filtered_data_merged, 'D')
     spmh_ts_plot.update_layout(margin={'l':0,'r':0,'b':0,'t':0})
     st.plotly_chart(spmh_ts_plot, use_container_width=True )
