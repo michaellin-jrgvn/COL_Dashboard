@@ -428,13 +428,13 @@ elif page == 'COL KPI Dashboard':
     sales_baseline_percent = round(len(below_baseline_sales)/len(b_df) * 100)
     
     # Filter manhour exceed baseline manhour desipite sales below baseline
-    excess_manhour_vs_baseline = below_baseline_sales[below_baseline_sales['Baseline Total Hour']<below_baseline_sales['Total actual hours (included Holiday and paid leave days)']]
-    excess_manhour_vs_baseline['Variance'] = excess_manhour_vs_baseline['Total actual hours (included Holiday and paid leave days)'] - excess_manhour_vs_baseline['Baseline Total Hour']
-    excess_manhour_vs_baseline['Variance %'] = round(excess_manhour_vs_baseline['Variance'].div(excess_manhour_vs_baseline['Baseline Total Hour']).mul(100),2)
-    excess_manhour_vs_baseline = excess_manhour_vs_baseline.set_index('Store Name')
+    excess_manhour_vs_baseline = below_baseline_sales[below_baseline_sales['Baseline Total Hour']<below_baseline_sales['Total actual hours (excluded Holiday and paid leave days)']]
+    excess_manhour_vs_baseline['Manhour Variance'] = excess_manhour_vs_baseline['Total actual hours (excluded Holiday and paid leave days)'] - excess_manhour_vs_baseline['Baseline Total Hour']
+    excess_manhour_vs_baseline['Manhour Variance %'] = round(excess_manhour_vs_baseline['Manhour Variance'].div(excess_manhour_vs_baseline['Baseline Total Hour']).mul(100),2)
+    excess_manhour_vs_baseline = excess_manhour_vs_baseline.set_index('Store Name').sort_values(['Manhour Variance'], ascending=False)
     
-    manhour_saving = excess_manhour_vs_baseline['Variance'].sum()
-    total_man_hour = filtered_data_merged['Total actual hours (included Holiday and paid leave days)'].sum()
+    manhour_saving = excess_manhour_vs_baseline['Manhour Variance'].sum()
+    total_man_hour = filtered_data_merged['Total actual hours (excluded Holiday and paid leave days)'].sum()
     
     percent_manhour_saving = round(100* manhour_saving / total_man_hour, 2)
     
@@ -448,23 +448,25 @@ elif page == 'COL KPI Dashboard':
     st.write(manhour_saving,'manhour can be reduced, equivalent to', percent_manhour_saving,'% of total manhour in the chosen period')
     excess_manhour_vs_baseline['dis_Date'] = excess_manhour_vs_baseline['Date'].apply(lambda x: x.strftime("%d %b, %Y"))
     excess_manhour_vs_baseline['Weekday'] = excess_manhour_vs_baseline['Date'].apply(lambda x: x.strftime("%A"))
-    mh_var_plot = px.strip(excess_manhour_vs_baseline, x=excess_manhour_vs_baseline.index,y='Variance', hover_data=['dis_Date', 'Weekday'])
+    mh_var_plot = px.strip(excess_manhour_vs_baseline, x=excess_manhour_vs_baseline.index,y='Manhour Variance', hover_data=['dis_Date', 'Weekday'])
     st.plotly_chart(mh_var_plot)
-    st.write(excess_manhour_vs_baseline[['Baseline Total Hour','Total actual hours (included Holiday and paid leave days)','Variance','Variance %']].groupby(excess_manhour_vs_baseline.index).agg({
+    st.write(excess_manhour_vs_baseline[['Baseline Total Hour','Total actual hours (excluded Holiday and paid leave days)','Manhour Variance','Manhour Variance %']].groupby(excess_manhour_vs_baseline.index).agg({
         'Baseline Total Hour': np.sum,
-        'Total actual hours (included Holiday and paid leave days)': np.sum,
-        'Variance': np.sum,
-        'Variance %': np.mean
-    }).sort_values(by=['Variance'],ascending=False))
+        'Total actual hours (excluded Holiday and paid leave days)': np.sum,
+        'Manhour Variance': np.sum,
+        'Manhour Variance %': np.mean
+    }).sort_values(by=['Manhour Variance'],ascending=False))
     
     st.subheader('Productivity (SPMH) vs Actual Sales:')
     # regression_plot(filtered_data_merged, 'SPMH vs Actual Sales Parameters:', 'Actual sales','Actual SPMH')
 
-    spmh_sales_reg_df = filtered_data_merged[['Date','Code','Store Name','Actual sales','Actual SPMH']]
-    X = spmh_sales_reg_df['Actual sales'].fillna(0)
-    y = spmh_sales_reg_df['Actual SPMH'].fillna(0)
+    spmh_sales_reg_df = filtered_data_merged[['Date','Code','Store Name','Actual sales','Actual SPMH']].sort_values(['Store Name','Date'])
+    Actual_Sales = spmh_sales_reg_df['Actual sales'].fillna(0)
+    Actual_SPMH = spmh_sales_reg_df['Actual SPMH'].fillna(0)
+    spmh_sales_reg_df['dis_Date'] = spmh_sales_reg_df['Date'].apply(lambda x: x.strftime("%d %b, %Y"))
+    spmh_sales_reg_df['Weekday'] = spmh_sales_reg_df['Date'].apply(lambda x: x.strftime("%A"))
 
-    spmh_store_plt = px.scatter(spmh_sales_reg_df, x=X,y=y,color='Store Name',trendline='ols')
+    spmh_store_plt = px.scatter(spmh_sales_reg_df, x=Actual_Sales,y=Actual_SPMH,color='Store Name',trendline='ols', hover_data=['dis_Date','Weekday'])
     st.plotly_chart(spmh_store_plt)
     
     with st.beta_expander('Display Table', expanded=True):
