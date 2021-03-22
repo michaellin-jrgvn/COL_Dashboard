@@ -322,8 +322,8 @@ with st.sidebar.beta_expander("Data Filter", expanded=True):
     start_date = pd.to_datetime(filtered_data_merged['Date']).min().to_pydatetime()
     check_date = pd.to_datetime(filtered_data_merged['Date']).max().to_pydatetime() - datetime.timedelta(days = 30)
     end_date = pd.to_datetime(filtered_data_merged['Date']).max().to_pydatetime()
-    date_range = st.slider(label='Select date range', min_value = start_date, max_value = end_date, value=(check_date, end_date))
-    filtered_data_merged = filtered_data_merged.loc[(filtered_data_merged['Date']>=date_range[0]) & (filtered_data_merged['Date'] <= date_range[1])]
+    date_range = st.date_input('Select date range',value=(check_date, end_date), min_value=start_date, max_value=end_date)
+    filtered_data_merged = filtered_data_merged.loc[(filtered_data_merged['Date']>=np.datetime64(date_range[0])) & (filtered_data_merged['Date'] <= np.datetime64(date_range[1]))]
     #filtered_trans_merged = filtered_trans_merged.loc[(filtered_trans_merged['date']>=date_range[0]) & (filtered_trans_merged['date']<=date_range[1])]
 
 # Multi page selector
