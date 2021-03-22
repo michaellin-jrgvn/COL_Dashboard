@@ -407,6 +407,8 @@ elif page == 'COL KPI Dashboard':
     
     with st.beta_expander('Display Data', expanded=True):
         st.write(mape_time_series)
+        st.write('Click the link below to download the data:')
+        st.markdown(get_table_download_link(mape_time_series), unsafe_allow_html=True)
 
     with st.beta_expander('Display Chart', expanded=True):
         mape_time_plot = px.line(mape_time_series)
@@ -473,6 +475,11 @@ elif page == 'COL KPI Dashboard':
         regression_table = regression_table(spmh_store_plt, 'Store Name')
         regression_table = regression_table[['Gradient','y-intercept','R2 Score']]
         st.dataframe(regression_table)
+        store_code_func = store_code_func.set_index('Store')
+        regression_download = store_code_func.merge(regression_table, how='inner', left_index=True, right_index=True)
+        # Download Data Section
+        st.write('Click the link below to download the data:')
+        st.markdown(get_table_download_link(regression_download), unsafe_allow_html=True)
     with st.beta_expander('Display Chart', expanded=True):
         st.subheader('SPMH Scatterplot (Gradient vs y-intercept)')
         regression_plot = px.scatter(regression_table,x='Gradient',y='y-intercept', size='R2 Score',color=regression_table.index)
