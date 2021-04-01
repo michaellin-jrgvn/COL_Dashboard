@@ -3,6 +3,7 @@ import pandas as pd
 import datetime
 import glob
 import plotly.express as px
+import plotly.figure_factory as ff
 import numpy as np
 from io import BytesIO
 import base64
@@ -427,6 +428,7 @@ elif page == 'COL KPI Dashboard':
 
     # Filter actual sales below baseline sales
     below_baseline_sales = b_df[b_df['Actual sales'] <= b_df['Baseline Sales']]
+    above_baseline_sales = b_df[b_df['Actual sales'] > b_df['Baseline Sales']]
     sales_baseline_percent = round(len(below_baseline_sales)/len(b_df) * 100)
     
     # Filter manhour exceed baseline manhour desipite sales below baseline
@@ -444,6 +446,8 @@ elif page == 'COL KPI Dashboard':
     st.write('There are total', len(b_df),'work days in the filter, but', len(below_baseline_sales),'work days were below baseline, equivalent to',sales_baseline_percent, '%.')
     with st.beta_expander('Display Data when Sales below baseline by Store & Date', expanded=False):
         st.write(below_baseline_sales[['Date','Store Name','Actual sales','Baseline Sales','Actual SPMH','Baseline SPMH']])
+        st.write(below_baseline_sales['Actual SPMH'].describe())
+        st.write(above_baseline_sales['Actual SPMH'].describe())
     
     st.subheader('Manhour Variance vs Baseline Hours by Store')
     st.write(len(excess_manhour_vs_baseline),'out of',len(below_baseline_sales),'below baseline sales works days did not follow the manhour baseline requirements. Below is the distribution of MH Variance by store.')
@@ -452,12 +456,13 @@ elif page == 'COL KPI Dashboard':
     excess_manhour_vs_baseline['Weekday'] = excess_manhour_vs_baseline['Date'].apply(lambda x: x.strftime("%A"))
     mh_var_plot = px.strip(excess_manhour_vs_baseline, x=excess_manhour_vs_baseline.index,y='Manhour Variance', hover_data=['dis_Date', 'Weekday'])
     st.plotly_chart(mh_var_plot)
-    st.write(excess_manhour_vs_baseline[['Baseline Total Hour','Total actual hours (excluded Holiday and paid leave days)','Manhour Variance','Manhour Variance %']].groupby(excess_manhour_vs_baseline.index).agg({
+    below_baseline_df = excess_manhour_vs_baseline[['Baseline Total Hour','Total actual hours (excluded Holiday and paid leave days)','Manhour Variance','Manhour Variance %']].groupby(excess_manhour_vs_baseline.index).agg({
         'Baseline Total Hour': np.sum,
         'Total actual hours (excluded Holiday and paid leave days)': np.sum,
         'Manhour Variance': np.sum,
         'Manhour Variance %': np.mean
-    }).sort_values(by=['Manhour Variance'],ascending=False))
+    }).sort_values(by=['Manhour Variance'],ascending=False)
+    st.write(below_baseline_df)
     
     st.subheader('Productivity (SPMH) vs Actual Sales:')
     # regression_plot(filtered_data_merged, 'SPMH vs Actual Sales Parameters:', 'Actual sales','Actual SPMH')
